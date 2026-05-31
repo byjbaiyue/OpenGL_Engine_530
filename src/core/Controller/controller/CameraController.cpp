@@ -85,12 +85,27 @@ void CameraController::cameraRotate() {
 void CameraController::cameraScroll()
 {
 	if (mouse_scroll_data != 0.0f) {
-		float target_fov = camera->getFov() + mouse_scroll_data * scroll_speed;
+		float current_fov = camera->getFov();
+
+		// 计算当前视距（假设物体大小为2个单位）
+		float current_distance = 1.0f / tan(glm::radians(current_fov) / 2.0f);
+
+		// 关键：根据当前距离调整缩放速度
+		// 距离越远，步长越大；距离越近，步长越小
+		float zoom_factor = 1.0f - mouse_scroll_data * scroll_speed * 0.1f;
+		float target_distance = current_distance * zoom_factor;
+
+		// 确保不反转方向
+		target_distance = glm::max(target_distance, 0.01f);
+
+		// 反算FOV
+		float target_fov = glm::degrees(2.0f * atan(1.0f / target_distance));
 		target_fov = glm::clamp(target_fov, 0.1f, 179.0f);
 
-		camera->setProjection(target_fov, (float)InputManager::GetInstance().GetWindowSize().x / InputManager::GetInstance().GetWindowSize().y, camera->getNearFar().x, camera->getNearFar().y);
+		camera->setProjection(target_fov,
+			(float)InputManager::GetInstance().GetWindowSize().x / InputManager::GetInstance().GetWindowSize().y,
+			camera->getNearFar().x, camera->getNearFar().y);
 
-
-		mouse_scroll_data = 0.0f; // 重置滚轮数据
+		mouse_scroll_data = 0.0f;
 	}
 }

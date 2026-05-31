@@ -73,6 +73,8 @@ Test::FBOTest::FBOTest(GLFWwindow* window) : clearColor(0.2f, 0.4f, 0.4f), delta
 	// 共享深度纹理（让透明物体能被不透明物体正确遮挡）
 	transparentFBO->AttachExternalDepthTexture(opaqueDepth);
 	transparentFBO->SetDrawBuffer({ GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 });
+
+
 	setupQuad();
 
 
@@ -94,7 +96,7 @@ Test::FBOTest::FBOTest(GLFWwindow* window) : clearColor(0.2f, 0.4f, 0.4f), delta
 	transparentShader_r->uniformsetInt("texture_base", 0);
 
 	{
-		std::vector<Texture*> textures = { TextureManager::getInstance()->loadTexture("asset/image/t_t.png", TextureType::translucent) };
+		std::vector<Texture*> textures = { TextureManager::getInstance()->loadTexture("asset/image/t_t_1.png", TextureType::translucent) };
 		std::vector<Vertex> vertex = blockVertex;
 		std::vector<unsigned int> indices = blockIndices;
 
@@ -237,9 +239,8 @@ void Test::FBOTest::Render() {
 	//===========================================================================================
 	baseFBO->Bind();
 
-	// 不透明阶段：完整初始化深度/混合状态
 	glEnable(GL_DEPTH_TEST); // 开启深度测试
-	glDepthFunc(GL_GREATER); // 深度测试函数：更远的片元通过（因为我们把深度清空为0.0，所以更远的片元深度值更大）
+	glDepthFunc(GL_GREATER); // 深度测试函数：更远的片元通过（因为我们把深度反转，所以更远的片元深度值更大）
 	glDepthMask(GL_TRUE);	 // 允许写入深度缓冲
 	glDisable(GL_BLEND);     // 关闭混合
 
@@ -263,24 +264,27 @@ void Test::FBOTest::Render() {
 	// 透明 FBO 阶段
 	transparentFBO->Bind();
 
-	// 2. 同时启用 0、1 两个颜色附件（你初始化已经配置过，这里再强制刷新一次）
+	// 2. 同时启用 0、1 两个颜色附件
 	GLenum allBufs[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
 	glDrawBuffers(2, allBufs);
 
-	// 3. 第一步：整体清空两个颜色附件为 (0,0,0,0)
-	renderer->setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-	renderer->Clear(GL_COLOR_BUFFER_BIT);
+	// 清空两个颜色附件
+	float color0[] = { 0,0,0,0 };
+	glClearBufferfv(GL_COLOR, 0, color0);
+	// 揭示度附件通常清为1
+	float color1[] = { 1,1,1,1 };
+	glClearBufferfv(GL_COLOR, 1, color1);
 
-	// ===== 透明通用深度状态（统一设置一次）=====
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_GREATER);
-	glDepthMask(GL_FALSE); // 透明关闭深度写入
+	glEnable(GL_DEPTH_TEST); // 开启深度测试
+	glDepthFunc(GL_GREATER); // 深度测试函数：更远的片元通过
+	glDepthMask(GL_FALSE);   // 关闭深度写入
 
 	// ===================== 绘制 Accumulation 附件0 (允许混合) =====================
 	GLenum drawBuf0 = GL_COLOR_ATTACHMENT0;
 	glDrawBuffers(1, &drawBuf0);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_ONE, GL_ONE);
+
+	glEnable(GL_BLEND); // 开启混合
+	glBlendFunc(GL_ONE, GL_ONE); // 累加模式：源颜色直接加到目标颜色上
 
 	transparentShader_a->use();
 	transparentShader_a->uniformsetMat4("view", glm::mat4(glm::mat3(camera->getView())));
@@ -293,10 +297,19 @@ void Test::FBOTest::Render() {
 	transparentShader_a->uniformsetVec3("chunkRelativePos", chunkRelativePos);
 	triangleMesh->Draw(*transparentShader_a);
 
-	// ===================== 绘制 Revealage 附件1 (必须关闭混合！) =====================
+	chunkRelativePos = glm::vec3(2, 2, 2) - glm::vec3(camera->getPos());
+	transparentShader_a->uniformsetVec3("chunkRelativePos", chunkRelativePos);
+	triangleMesh->Draw(*transparentShader_a);
+
+
+	// ===================== 绘制 Revealage 附件1 =====================
+
 	GLenum drawBuf1 = GL_COLOR_ATTACHMENT1;
 	glDrawBuffers(1, &drawBuf1);
-	glDisable(GL_BLEND); // 【重要修复】reveal 通道禁止混合
+
+	//glDisable(GL_BLEND);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_ZERO, GL_SRC_COLOR); // 揭示度混合：目标颜色乘以(1-源颜色)，源颜色不影响目标颜色
 
 	transparentShader_r->use();
 	transparentShader_r->uniformsetMat4("view", glm::mat4(glm::mat3(camera->getView())));
@@ -309,8 +322,22 @@ void Test::FBOTest::Render() {
 	transparentShader_r->uniformsetVec3("chunkRelativePos", chunkRelativePos);
 	triangleMesh->Draw(*transparentShader_r);
 
-	// 恢复深度写入（下一帧安全）
-	glDepthMask(GL_TRUE);
+	chunkRelativePos = glm::vec3(2, 2, 2) - glm::vec3(camera->getPos());
+	transparentShader_r->uniformsetVec3("chunkRelativePos", chunkRelativePos);
+	triangleMesh->Draw(*transparentShader_r);
+	//============================================================================================
+	
+	
+
+
+
+	//glReadBuffer(GL_COLOR_ATTACHMENT1); // 读取累积颜色附件
+	//float pixel[4];
+	//glReadPixels(InputManager::GetInstance().GetWindowSize().x / 2, InputManager::GetInstance().GetWindowSize().y / 2, 1, 1, GL_RGBA, GL_FLOAT, pixel);
+
+	//// 3. 控制台打印 ViewPos.z 精确值
+	//std::cout << "Center Pixel RGBA (Accum): " << pixel[0] << ", " << pixel[1] << ", " << pixel[2] << ", " << pixel[3] << std::endl;
+
 	////===========================================================================================
 
 	transparentFBO->Unbind();
