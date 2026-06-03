@@ -10,21 +10,29 @@ uniform sampler2D revealageTexture;
 
 void main()
 {
+    // 1. 不透明背景
     vec3 opaqueColor = texture(opaqueTexture, TexCoord).rgb;
-
-    vec4 accum = texture(accumulationTexture, TexCoord);
-
-    float revealage = texture(revealageTexture, TexCoord).r;//越大越透明
     
-
-    // revealage为1直接绘制底色
-    if(revealage > 0.99) {
-        FragColor = vec4(opaqueColor, 1.0);
+    // 2. 透明物体的累加数据
+    vec4 accum = texture(accumulationTexture, TexCoord);
+    
+    // 3. 透射率（revealage = 剩余透明度）
+    float revealage = texture(revealageTexture, TexCoord).r;
+    
+    // 4. 合成
+    vec3 transparentColor;
+    if (accum.a > 0.001) {
+        // 恢复平均颜色
+        transparentColor = accum.rgb / accum.a;
     } else {
-
-        vec3 transparentColor = accum.rgb / max(accum.a, 0.001);
-        FragColor = vec4(mix(transparentColor,opaqueColor , revealage), 1.0);
+        transparentColor = vec3(0.0);
     }
+    
+    // 5. 最终混合（注意：revealage 应该是剩余的不透明度比例）
+    // 标准公式：最终颜色 = 透明颜色 + 不透明颜色 * 剩余透明度
+    vec3 finalColor = transparentColor + opaqueColor * revealage;
+    
+    FragColor = vec4(finalColor, 1.0);
     
         // 调试：显示各个缓冲的值
     // 取消注释下面任意一行来调试

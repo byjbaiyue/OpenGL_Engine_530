@@ -23,5 +23,5 @@ void main()
 
 
 
-    ViewZ = ( -ViewPos.z )/ 200 ; //-ViewPos.z越远值越大(ViewZ范围0~1)
+    ViewZ = ( -ViewPos.z ) ; //-ViewPos.z越远值越大(ViewZ范围0~1)
 }
